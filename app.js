@@ -3,14 +3,14 @@
 //  Substitua os valores abaixo pelos do seu projeto
 // ════════════════════════════════════════════════════
 
-const firebaseConfig = {
-  apiKey: "AIzaSyC6dNJzJHfriAXr9qG1AlUwlpeBraayipA",
-  authDomain: "winner-arena.firebaseapp.com",
-  projectId: "winner-arena",
-  storageBucket: "winner-arena.firebasestorage.app",
-  messagingSenderId: "221572900832",
-  appId: "1:221572900832:web:0f11edfeea37d4e58cad85"
-}
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyBbHnGkOYcKSDbLXe8dTub4OfLoXhx0VK8",
+  authDomain:        "winner-app-d3a9b.firebaseapp.com",
+  projectId:         "winner-app-d3a9b",
+  storageBucket:     "winner-app-d3a9b.firebasestorage.app",
+  messagingSenderId: "759539483431",
+  appId:             "1:759539483431:web:88daa0612d17fbca265f02"
+};
 
 // Número da Maria para notificações WhatsApp (DDI+DDD+número, sem espaços)
 const MARIA_TEL = "554998147899";
@@ -30,16 +30,27 @@ const TIME_SLOTS = [
   "13:00","14:00","15:00","16:00","17:00","18:00",
   "19:00","20:00","21:00","22:00"
 ];
-const MESES = [
-  {key:"2025-04",label:"Abr/25"},{key:"2025-05",label:"Mai/25"},
-  {key:"2025-06",label:"Jun/25"},{key:"2025-07",label:"Jul/25"},
-  {key:"2025-08",label:"Ago/25"},{key:"2025-09",label:"Set/25"},
-  {key:"2025-10",label:"Out/25"},{key:"2025-11",label:"Nov/25"},
-  {key:"2025-12",label:"Dez/25"},{key:"2026-01",label:"Jan/26"},
-  {key:"2026-02",label:"Fev/26"},{key:"2026-03",label:"Mar/26"},
-];
-const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
-                   "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const MONTHS_PT  = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+                    "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const MONTHS_SH  = ["Jan","Fev","Mar","Abr","Mai","Jun",
+                    "Jul","Ago","Set","Out","Nov","Dez"];
+
+// Gera 12 meses dinamicamente: 6 anteriores + mês atual + 5 próximos
+function buildMeses() {
+  const now   = new Date();
+  const meses = [];
+  // começa 6 meses atrás para ter histórico
+  for (let i = -6; i <= 11; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const y = d.getFullYear();
+    const m = d.getMonth(); // 0-indexed
+    const key   = `${y}-${String(m+1).padStart(2,"0")}`;
+    const label = `${MONTHS_SH[m]}/${String(y).slice(2)}`;
+    meses.push({ key, label });
+  }
+  return meses;
+}
+const MESES = buildMeses();
 
 // ─────────────────────────────────────────
 // ESTADO GLOBAL
@@ -152,8 +163,41 @@ function hideLoading(){ const el=document.getElementById("ld"); if(el)el.style.d
 //  FIREBASE — CARREGAR DADOS
 // ════════════════════════════════════════════
 async function loadReservations(){
-  const snap=await db.collection("reservations").get();
-  reservations=snap.docs.map(d=>({id:d.id,...d.data()}));
+  try {
+    const snap=await db.collection("reservations").get();
+    reservations=snap.docs.map(d=>({id:d.id,...d.data()}));
+  } catch(e) {
+    console.error("Erro Firestore:", e.code, e.message);
+    if(e.code==="permission-denied") {
+      showErroConexao("❌ Permissão negada no banco de dados.<br>Verifique as regras do Firestore.");
+    } else if(e.code==="unavailable" || e.message.includes("network")) {
+      showErroConexao("❌ Sem conexão com o banco de dados.<br>Verifique sua internet.");
+    } else {
+      showErroConexao("❌ Erro ao conectar: " + e.message);
+    }
+  }
+}
+
+function showErroConexao(msg) {
+  hideLoading();
+  const el = document.createElement("div");
+  el.style.cssText = `position:fixed;inset:0;z-index:300;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:16px;
+    background:rgba(245,234,208,.96);padding:24px;text-align:center`;
+  el.innerHTML = `
+    <div style="font-size:2rem">🔥</div>
+    <div style="font-size:1rem;font-weight:700;color:#cf3b2f;max-width:320px;line-height:1.6">${msg}</div>
+    <div style="font-size:.85rem;color:#555;max-width:320px;line-height:1.6">
+      Verifique:<br>
+      1. Se o Firestore foi criado no Firebase<br>
+      2. Se as regras foram publicadas<br>
+      3. Se as credenciais no app.js estão corretas
+    </div>
+    <button onclick="location.reload()" style="padding:10px 20px;border-radius:12px;border:none;
+      background:#2d6018;color:#fff;font-weight:700;cursor:pointer;font-size:.9rem">
+      Tentar novamente
+    </button>`;
+  document.body.appendChild(el);
 }
 async function loadAlunos(){
   const snap=await db.collection("alunos").orderBy("nome").get();
@@ -280,39 +324,93 @@ function openReserveFromCal(){
 }
 
 // ─────────────────────────────────────────
-// RESERVAR (público)
+// RESERVAR (público) — campos editáveis
 // ─────────────────────────────────────────
 function prefillReserve(date,court,time){
-  reserveData={date,court,time}; showScreen("reservar"); renderResSummary();
+  reserveData={date,court,time};
+  showScreen("reservar");
+  syncResFormFields();
 }
-function renderResSummary(){
-  document.getElementById("summaryDate").textContent =reserveData.date ?formatDateLabel(reserveData.date):"Não selecionado";
-  document.getElementById("summaryCourt").textContent=reserveData.court||"Não selecionada";
-  document.getElementById("summaryTime").textContent =reserveData.time ||"Não selecionado";
-  ["step1","step2","step3","step4"].forEach(s=>document.getElementById(s).classList.remove("active"));
-  if(!reserveData.date)  return document.getElementById("step1").classList.add("active");
-  if(!reserveData.court) return document.getElementById("step2").classList.add("active");
-  if(!reserveData.time)  return document.getElementById("step3").classList.add("active");
-  document.getElementById("step4").classList.add("active");
+function openReserveFromCal(){
+  if(calSelectedDk) reserveData.date=calSelectedDk;
+  reserveData.court=null; reserveData.time=null;
+  showScreen("reservar");
+  syncResFormFields();
 }
+
+// Sincroniza os selects/inputs com reserveData
+function syncResFormFields(){
+  const dateEl   =document.getElementById("resData");
+  const quadraEl =document.getElementById("resQuadra");
+  const horarioEl=document.getElementById("resHorario");
+  if(dateEl    && reserveData.date)  dateEl.value   =reserveData.date;
+  if(quadraEl  && reserveData.court) quadraEl.value =reserveData.court;
+  if(horarioEl && reserveData.time)  horarioEl.value=reserveData.time;
+  checkConflict();
+}
+
+// Callbacks dos selects
+function resDataChanged(){
+  const v=document.getElementById("resData").value;
+  reserveData.date=v||null;
+  checkConflict();
+}
+function resQuadraChanged(){
+  const v=document.getElementById("resQuadra").value;
+  reserveData.court=v||null;
+  checkConflict();
+}
+function resHorarioChanged(){
+  const v=document.getElementById("resHorario").value;
+  reserveData.time=v||null;
+  checkConflict();
+}
+
+// Verifica se o horário escolhido está ocupado
+function checkConflict(){
+  const msgEl=document.getElementById("resHorarioOcupadoMsg");
+  if(!msgEl)return;
+  if(reserveData.date&&reserveData.court&&reserveData.time){
+    const ocupado=!!getRes(reserveData.date,reserveData.court,reserveData.time);
+    msgEl.style.display=ocupado?"block":"none";
+  } else {
+    msgEl.style.display="none";
+  }
+}
+
+// Mantém renderResSummary vazio (campos ocultos no HTML)
+function renderResSummary(){ syncResFormFields(); }
+
 function clearResForm(){
   reserveData={date:null,court:null,time:null};
-  ["resNome","resTelefone","resObs"].forEach(id=>document.getElementById(id).value="");
+  const fields=["resData","resQuadra","resHorario","resNome","resTelefone","resObs"];
+  fields.forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
   document.getElementById("resValor").value="60.00";
   document.getElementById("resTipo").value="avulso";
-  renderResSummary();
+  const msgEl=document.getElementById("resHorarioOcupadoMsg");
+  if(msgEl)msgEl.style.display="none";
 }
 
 async function confirmReservation(){
+  // Lê data, quadra e horário dos novos selects do formulário
+  const dataEl   =document.getElementById("resData");
+  const quadraEl =document.getElementById("resQuadra");
+  const horarioEl=document.getElementById("resHorario");
+  if(dataEl    && dataEl.value)    reserveData.date  =dataEl.value;
+  if(quadraEl  && quadraEl.value)  reserveData.court =quadraEl.value;
+  if(horarioEl && horarioEl.value) reserveData.time  =horarioEl.value;
+
   const nome    =document.getElementById("resNome").value.trim();
   const telefone=normPhone(document.getElementById("resTelefone").value);
   const tipo    =document.getElementById("resTipo").value;
   const valor   =Number(document.getElementById("resValor").value||60);
 
-  if(!reserveData.date||!reserveData.court||!reserveData.time){alert("Selecione um horário na agenda.");return;}
+  if(!reserveData.date)  {alert("Selecione a data.");return;}
+  if(!reserveData.court) {alert("Selecione a quadra.");return;}
+  if(!reserveData.time)  {alert("Selecione o horário.");return;}
   if(!nome)              {alert("Informe o nome completo.");return;}
   if(telefone.length<10) {alert("Informe um telefone válido.");return;}
-  if(getRes(reserveData.date,reserveData.court,reserveData.time)){alert("Este horário já está ocupado. Escolha outro.");return;}
+  if(getRes(reserveData.date,reserveData.court,reserveData.time)){alert("Este horário já está ocupado. Escolha outro horário ou quadra.");return;}
 
   const newR={
     tipo,time:reserveData.time,court:reserveData.court,nome,telefone,valor,
@@ -687,6 +785,11 @@ function renderPayTable(){
 function renderAlunosTable(){
   const tbody=document.getElementById("alunosTableBody");
   if(!tbody)return;
+
+  // Injeta cabeçalhos dos meses dinamicamente
+  const hdrEl=document.getElementById("meses-header-cols");
+  if(hdrEl) hdrEl.outerHTML=MESES.map(m=>`<th style="min-width:48px;text-align:center">${m.label}</th>`).join("");
+
   if(!alunos.length){
     tbody.innerHTML=`<tr><td colspan="${4+MESES.length+1}"
       style="text-align:center;color:#999;padding:24px">

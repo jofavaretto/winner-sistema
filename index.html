@@ -92,33 +92,51 @@
           </div>
         </div>
 
-        <div class="stepper">
-          <div class="step" id="step1">1. Dia</div>
-          <div class="step" id="step2">2. Quadra</div>
-          <div class="step" id="step3">3. Horário</div>
-          <div class="step" id="step4">4. Confirmar</div>
-        </div>
-
-        <div class="reservation-summary">
-          <div class="summary-card">
-            <span>Dia</span>
-            <strong id="summaryDate">Não selecionado</strong>
-          </div>
-          <div class="summary-card">
-            <span>Quadra</span>
-            <strong id="summaryCourt">Não selecionada</strong>
-          </div>
-          <div class="summary-card">
-            <span>Horário</span>
-            <strong id="summaryTime">Não selecionado</strong>
-          </div>
-          <div class="summary-card">
-            <span>Valor padrão</span>
-            <strong>R$ 60,00</strong>
-          </div>
-        </div>
-
         <div class="form-grid">
+          <div class="field">
+            <label for="resData">Data</label>
+            <input type="date" id="resData" onchange="resDataChanged()">
+          </div>
+
+          <div class="field">
+            <label for="resQuadra">Quadra</label>
+            <select id="resQuadra" onchange="resQuadraChanged()">
+              <option value="">Selecione a quadra</option>
+              <option value="Coberta">Coberta</option>
+              <option value="Quadra 2">Quadra 2</option>
+              <option value="Quadra 3">Quadra 3 (nova)</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="resHorario">Horário</label>
+            <select id="resHorario" onchange="resHorarioChanged()">
+              <option value="">Selecione o horário</option>
+              <option value="07:00">07:00</option>
+              <option value="08:00">08:00</option>
+              <option value="09:00">09:00</option>
+              <option value="10:00">10:00</option>
+              <option value="11:00">11:00</option>
+              <option value="12:00">12:00</option>
+              <option value="13:00">13:00</option>
+              <option value="14:00">14:00</option>
+              <option value="15:00">15:00</option>
+              <option value="16:00">16:00</option>
+              <option value="17:00">17:00</option>
+              <option value="18:00">18:00</option>
+              <option value="19:00">19:00</option>
+              <option value="20:00">20:00</option>
+              <option value="21:00">21:00</option>
+              <option value="22:00">22:00</option>
+            </select>
+          </div>
+
+          <div class="field" id="resHorarioOcupadoMsg" style="display:none">
+            <div style="background:rgba(207,59,47,.12);color:#cf3b2f;border-radius:12px;padding:12px 14px;font-weight:700;font-size:.9rem">
+              ⚠️ Este horário já está ocupado. Escolha outro.
+            </div>
+          </div>
+
           <div class="field">
             <label for="resNome">Nome completo</label>
             <input type="text" id="resNome" placeholder="Digite o nome completo">
@@ -133,14 +151,22 @@
             <label for="resTipo">Tipo da reserva</label>
             <select id="resTipo">
               <option value="avulso">Avulso</option>
-              <option value="fixo">Fixo</option>
+              <option value="fixo">Fixo (toda semana)</option>
             </select>
           </div>
 
           <div class="field">
-            <label for="resValor">Valor</label>
+            <label for="resValor">Valor (R$)</label>
             <input type="text" id="resValor" value="60.00">
           </div>
+          <!-- campos ocultos para compatibilidade com JS -->
+          <span id="summaryDate" style="display:none"></span>
+          <span id="summaryCourt" style="display:none"></span>
+          <span id="summaryTime" style="display:none"></span>
+          <span id="step1" style="display:none"></span>
+          <span id="step2" style="display:none"></span>
+          <span id="step3" style="display:none"></span>
+          <span id="step4" style="display:none"></span>
 
           <div class="field full">
             <label for="resObs">Observação</label>
@@ -267,10 +293,7 @@
                     <th style="min-width:130px">Telefone</th>
                     <th style="min-width:180px">Horário/Turma</th>
                     <th style="min-width:100px">Mensalidade</th>
-                    <th>Abr/25</th><th>Mai/25</th><th>Jun/25</th>
-                    <th>Jul/25</th><th>Ago/25</th><th>Set/25</th>
-                    <th>Out/25</th><th>Nov/25</th><th>Dez/25</th>
-                    <th>Jan/26</th><th>Fev/26</th><th>Mar/26</th>
+                    <th id="meses-header-cols"></th>
                     <th style="min-width:210px">Ações</th>
                   </tr>
                 </thead>
@@ -283,10 +306,11 @@
     </section>
 
     <div class="footer-note">
-      WINNER – Esportes de Areia • Sistema web
-      <br>
-       
-    </div>
+  WINNER – Esportes de Areia • Todos os direitos reservados. <br>
+  <a href="/politica-de-privacidade" style="color: inherit; text-decoration: none;">Privacidade (LGPD)</a> • 
+  <br> 
+  Desenvolvido por Mix Digitech
+</div>
   </div>
 
   <div id="modalBackdrop" class="modal-backdrop">
