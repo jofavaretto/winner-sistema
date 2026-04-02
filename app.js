@@ -239,6 +239,7 @@ function renderAll(){
   renderCalendar();
   renderResSummary();
   if(adminLogged){
+    renderAdmCalendar();
     renderAdmDays();
     renderAdmSchedule();
     renderPayTable();
@@ -304,14 +305,57 @@ function renderCalDayDetail(dk){
   document.getElementById("calDetailDate").textContent=
     d.toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long",year:"numeric"});
   const list=document.getElementById("calDetailList");
-  if(!evs.length){list.innerHTML=`<div style="color:#777;font-size:.9rem;padding:10px 0">Nenhuma reserva neste dia.</div>`;return;}
-  // Público: só nome, hora e quadra — sem pagamento
-  list.innerHTML=evs.map(({r})=>`
-    <div class="cal-detail-item ${evClass(r.court,r.tipo)}">
-      <span class="det-time">${r.time}</span>
-      <span class="det-name">${r.nome}</span>
-      <span class="det-court">${r.court} · ${r.tipo}</span>
-    </div>`).join("");
+
+  // Horários ocupados
+  const ocupadosHtml = evs.length
+    ? evs.map(({r})=>`
+        <div class="cal-detail-item ${evClass(r.court,r.tipo)}">
+          <span class="det-time">${r.time}</span>
+          <span class="det-name">${r.nome}</span>
+          <span class="det-court">${r.court} · ${r.tipo}</span>
+        </div>`).join("")
+    : `<div style="color:#777;font-size:.9rem;padding:8px 0">Nenhuma reserva neste dia.</div>`;
+
+  // Calcula horários livres por quadra
+  const livres = [];
+  for(const time of TIME_SLOTS){
+    const livresPorHora = [];
+    for(const court of COURTS){
+      if(!getRes(dk, court, time)) livresPorHora.push(court);
+    }
+    if(livresPorHora.length){
+      livres.push({time, courts: livresPorHora});
+    }
+  }
+
+  const livresHtml = livres.length ? livres.map(({time, courts})=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:7px 10px;
+      border-radius:10px;margin-bottom:5px;background:rgba(255,255,255,.55);
+      border:1px dashed rgba(45,96,24,.3);cursor:pointer"
+      onclick="openReserveFromCalSlot('${dk}','${time}')">
+      <span style="font-size:.78rem;font-weight:800;color:#555;min-width:44px">${time}</span>
+      <span style="flex:1;font-size:.8rem;color:#2d6018;font-weight:600">${courts.join(" · ")}</span>
+      <span style="font-size:.75rem;color:#2d6018;font-weight:700">+ Reservar</span>
+    </div>`).join("")
+    : `<div style="color:#777;font-size:.85rem;padding:6px 0">Nenhum horário livre neste dia.</div>`;
+
+  list.innerHTML=`
+    ${ocupadosHtml}
+    <div style="margin-top:14px;margin-bottom:6px;font-size:.78rem;font-weight:800;
+      color:#2d6018;text-transform:uppercase;letter-spacing:.06em">
+      🟢 Horários disponíveis
+    </div>
+    ${livresHtml}`;
+}
+
+function openReserveFromCalSlot(dk, time){
+  reserveData.date  = dk;
+  reserveData.time  = time;
+  reserveData.court = null;
+  closeModal();
+  closeCalDetail();
+  showScreen("reservar");
+  syncResFormFields();
 }
 function closeCalDetail(){
   calSelectedDk=null;
@@ -935,6 +979,298 @@ function showScreen(name){
   if(name==="agenda")  renderCalendar();
 }
 
+
+// ════════════════════════════════════════════
+//  ADMIN — CALENDÁRIO MENSAL COM PAGAMENTOS
+// ════════════════════════════════════════════
+let admCalYear  = null;
+let admCalMonth = null;
+let admCalSelectedDk = null;
+
+function renderAdmCalendar(){
+  const now = nowSP();
+  if(admCalYear===null)  admCalYear  = now.getFullYear();
+  if(admCalMonth===null) admCalMonth = now.getMonth();
+
+  const label = document.getElementById("admCalMonthLabel");
+  if(label) label.textContent = `${MONTHS_PT[admCalMonth]} ${admCalYear}`;
+
+  const grid    = document.getElementById("admCalGrid");
+  if(!grid) return;
+  const todayKey = toDateKey(now);
+  const firstDay = new Date(admCalYear, admCalMonth, 1).getDay();
+  const daysInM  = new Date(admCalYear, admCalMonth+1, 0).getDate();
+  const prevDays = new Date(admCalYear, admCalMonth, 0).getDate();
+  const cells    = [];
+
+  for(let i=firstDay-1;i>=0;i--)
+    cells.push({dk:toDateKey(new Date(admCalYear,admCalMonth-1,prevDays-i)),num:prevDays-i,other:true});
+  for(let d=1;d<=daysInM;d++)
+    cells.push({dk:toDateKey(new Date(admCalYear,admCalMonth,d)),num:d,other:false});
+  let nx=1;
+  while(cells.length%7!==0)
+    cells.push({dk:toDateKey(new Date(admCalYear,admCalMonth+1,nx++)),num:nx-1,other:true});
+
+  const isMobile = window.innerWidth<=640;
+  const MAX = isMobile ? 0 : 2;
+
+  grid.innerHTML = cells.map(({dk,num,other})=>{
+    const evs     = getEventsForDate(dk);
+    const isToday = dk===todayKey;
+    const isSel   = dk===admCalSelectedDk;
+
+    // Pills com indicador de pagamento para o admin
+    const pills = evs.slice(0,MAX).map(({r})=>{
+      const pago = r.status_pagamento==="pago";
+      const cls  = evClass(r.court, r.tipo);
+      return `<div class="cal-event ${cls}" style="position:relative" title="${r.time} · ${r.nome} · ${r.court} · ${pago?'Pago':'Pendente'}">
+        <div class="cal-event-dot" style="background:${pago?'#a5d6a7':'#ef9a9a'}"></div>
+        ${r.time} ${r.nome}
+      </div>`;
+    }).join("");
+
+    const more = evs.length>MAX&&!isMobile
+      ? `<div class="cal-more">+${evs.length-MAX} mais</div>` : "";
+
+    // Pontos mobile: vermelho=pendente, verde=pago
+    const dots = evs.slice(0,5).map(({r})=>{
+      const pago = r.status_pagamento==="pago";
+      return `<div class="cal-dot" style="background:${pago?'#1e8e3e':'#cf3b2f'}"></div>`;
+    }).join("");
+    const dotHtml = evs.length ? `<div class="cal-dots">${dots}</div>` : "";
+
+    // Indicador de livres/ocupados
+    const totalSlots = TIME_SLOTS.length * COURTS.length;
+    const occupied   = evs.length;
+    const free       = totalSlots - occupied;
+
+    return `<div class="cal-cell${other?" other-month":""}${isToday?" today":""}${isSel?" cal-selected":""}"
+      onclick="admCalSelectDay('${dk}')">
+      <div class="cal-day-num">${num}</div>
+      ${pills}${more}${dotHtml}
+      ${!other&&evs.length>0?`<div style="font-size:.6rem;color:#888;margin-top:2px">${occupied} res · ${free} livres</div>`:""}
+    </div>`;
+  }).join("");
+
+  if(admCalSelectedDk) renderAdmCalDayDetail(admCalSelectedDk);
+}
+
+function admCalSelectDay(dk){
+  admCalSelectedDk = dk;
+  renderAdmCalendar();
+  renderAdmCalDayDetail(dk);
+  document.getElementById("admCalDayDetail").classList.remove("hidden");
+}
+
+function renderAdmCalDayDetail(dk){
+  const evs = getEventsForDate(dk);
+  const d   = new Date(dk+"T00:00:00");
+  document.getElementById("admCalDetailDate").textContent =
+    d.toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long",year:"numeric"});
+
+  const list = document.getElementById("admCalDetailList");
+
+  // Ocupados — com status de pagamento
+  const ocupHtml = evs.length ? evs.map(({r})=>{
+    const pago = r.status_pagamento==="pago";
+    const msg  = `Olá ${r.nome}! 🎾 Lembrete de pagamento na Winner.\n\n📅 ${formatDateLabel(dk)}\n⏰ ${r.time} — ${r.court}\n💰 ${fmtMoney(r.valor)}\n\nObrigada! 😊`;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;
+      border-radius:10px;margin-bottom:6px;background:${pago?"rgba(30,142,62,.12)":"rgba(207,59,47,.08)"};
+      border:1px solid ${pago?"#1e8e3e44":"#cf3b2f44"}">
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:.88rem">${r.time} — ${r.nome}</div>
+        <div style="font-size:.75rem;color:#666">${r.court} · ${r.tipo}</div>
+      </div>
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.78rem;font-weight:700;flex-shrink:0"
+        onclick="togglePago('${r.id}');renderAdmCalDayDetail('${dk}');renderAdmCalendar()">
+        <div style="width:18px;height:18px;border-radius:4px;border:2px solid ${pago?"#1e8e3e":"#cf3b2f"};
+          background:${pago?"#1e8e3e":"transparent"};display:flex;align-items:center;justify-content:center">
+          ${pago?`<svg viewBox="0 0 12 12" style="width:10px;height:10px;fill:#fff"><path d="M1 6l3.5 3.5L11 2"/></svg>`:""}
+        </div>
+        <span style="color:${pago?"#1e8e3e":"#cf3b2f"}">${pago?"Pago":"Pendente"}</span>
+      </label>
+      ${!pago?`<a href="${waLink(r.telefone,msg)}" target="_blank"
+        style="padding:4px 8px;background:#25D366;color:#fff;border-radius:7px;text-decoration:none;font-size:.72rem;font-weight:700;flex-shrink:0">📲</a>`:""}
+      <button onclick="openAdmModal('${r.id}','${dk}')"
+        style="padding:4px 8px;border:1px solid #ccc;border-radius:7px;background:#fff;cursor:pointer;font-size:.72rem;flex-shrink:0">⋯</button>
+    </div>`;
+  }).join("")
+  : `<div style="color:#777;font-size:.88rem;padding:6px 0">Nenhuma reserva neste dia.</div>`;
+
+  // Livres
+  const livres = [];
+  for(const time of TIME_SLOTS){
+    const livresNaHora = COURTS.filter(c=>!getRes(dk,c,time));
+    if(livresNaHora.length) livres.push({time,courts:livresNaHora});
+  }
+
+  const livresHtml = livres.slice(0,8).map(({time,courts})=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;
+      border-radius:8px;margin-bottom:4px;background:rgba(255,255,255,.55);
+      border:1px dashed rgba(45,96,24,.3)">
+      <span style="font-size:.78rem;font-weight:800;color:#555;min-width:42px">${time}</span>
+      <span style="flex:1;font-size:.78rem;color:#2d6018;font-weight:600">${courts.join(" · ")}</span>
+      <button onclick="openAdmNewResDay('${dk}','${time}')"
+        style="padding:3px 9px;border:1px solid #2d6018;border-radius:6px;
+        background:transparent;color:#2d6018;cursor:pointer;font-size:.72rem;font-weight:700">+ Add</button>
+    </div>`).join("");
+
+  list.innerHTML=`
+    <div style="font-size:.75rem;font-weight:800;color:#333;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
+      Reservas (${evs.length})
+    </div>
+    ${ocupHtml}
+    <div style="font-size:.75rem;font-weight:800;color:#2d6018;text-transform:uppercase;letter-spacing:.06em;margin:12px 0 8px">
+      🟢 Disponíveis
+    </div>
+    ${livresHtml||'<div style="color:#777;font-size:.85rem">Todos os horários ocupados.</div>'}`;
+}
+
+function openAdmNewResDay(dk, time){
+  // Abre modal de nova reserva já com dia e hora
+  admSelectedDate = dk;
+  document.getElementById("modalContent").innerHTML=`
+    <h3 style="margin-bottom:12px">Nova reserva</h3>
+    <p style="color:#555;margin-bottom:16px">${formatDateLabel(dk)} · ${time}</p>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="field"><label>Nome completo</label><input type="text" id="mdNome" placeholder="Nome do cliente"></div>
+      <div class="field"><label>Telefone</label><input type="text" id="mdTel" placeholder="(49) 9 9999-9999" maxlength="16"></div>
+      <div class="field"><label>Quadra</label>
+        <select id="mdCourt">
+          ${COURTS.filter(c=>!getRes(dk,c,time)).map(c=>`<option value="${c}">${c}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field"><label>Tipo</label>
+        <select id="mdTipo"><option value="avulso">Avulso</option><option value="fixo">Fixo (semanal)</option></select>
+      </div>
+      <div class="field"><label>Valor (R$)</label><input type="text" id="mdValor" value="60.00"></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px">
+      <button class="btn btn-primary" onclick="saveAdmNewRes('${dk}',''+document.getElementById('mdCourt').value,'${time}')">Salvar</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+    </div>`;
+  document.getElementById("mdTel").addEventListener("input",e=>{e.target.value=formatPhone(e.target.value);});
+  document.getElementById("modalBackdrop").classList.add("show");
+}
+
+function openAdmNewResFromCal(){
+  if(admCalSelectedDk) openAdmNewResDay(admCalSelectedDk, "08:00");
+}
+
+function closeAdmCalDetail(){
+  admCalSelectedDk = null;
+  document.getElementById("admCalDayDetail").classList.add("hidden");
+  renderAdmCalendar();
+}
+function closeAdmGrid(){
+  document.getElementById("admGridSection").classList.add("hidden");
+}
+
+
+// ════════════════════════════════════════════
+//  HORÁRIOS FIXOS — importação pela Maria
+// ════════════════════════════════════════════
+const HORARIOS_FIXOS = [
+  // SEGUNDA
+  {nome:"Julia",  weekday:1, time:"18:00", court:"Quadra 3"},
+  {nome:"Thaís",  weekday:1, time:"19:00", court:"Quadra 3"},
+  {nome:"Susana", weekday:1, time:"20:00", court:"Quadra 3"},
+  // TERÇA
+  {nome:"Maira",  weekday:2, time:"18:00", court:"Quadra 3"},
+  {nome:"Fran",   weekday:2, time:"19:00", court:"Quadra 3"},
+  {nome:"Daia",   weekday:2, time:"20:00", court:"Quadra 3"},
+  // QUARTA
+  {nome:"Susi",   weekday:3, time:"18:00", court:"Quadra 3"},
+  {nome:"Borsoi", weekday:3, time:"19:00", court:"Quadra 3"},
+  {nome:"Juli",   weekday:3, time:"20:00", court:"Quadra 3"},
+  // QUINTA
+  {nome:"Gabriel",weekday:4, time:"17:00", court:"Quadra 3"},
+  {nome:"Gerusa", weekday:4, time:"19:00", court:"Quadra 3"},
+  {nome:"Esthé",  weekday:4, time:"19:00", court:"Quadra 2"},
+  {nome:"Gerusa", weekday:4, time:"20:00", court:"Quadra 3"},
+  {nome:"Daia",   weekday:4, time:"20:00", court:"Quadra 2"},
+  // SEXTA
+  {nome:"Paola",  weekday:5, time:"19:00", court:"Quadra 3"},
+  // SÁBADO
+  {nome:"Janda",  weekday:6, time:"08:00", court:"Coberta"},
+  {nome:"Pri",    weekday:6, time:"17:00", court:"Quadra 3"},
+  {nome:"Borsoi", weekday:6, time:"18:00", court:"Quadra 2"},
+  {nome:"Luan",   weekday:6, time:"18:00", court:"Quadra 3"},
+  // DOMINGO
+  {nome:"Borsoi", weekday:0, time:"17:00", court:"Quadra 3"},
+  {nome:"Borsoi", weekday:0, time:"18:00", court:"Quadra 2"},
+  {nome:"Tália",  weekday:0, time:"18:00", court:"Quadra 3"},
+];
+
+function openImportFixosModal() {
+  const dias = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+  const lista = HORARIOS_FIXOS.map(h=>
+    `<div style="padding:5px 0;border-bottom:1px solid #eee;font-size:.85rem">
+      <strong>${dias[h.weekday]}</strong> ${h.time} — ${h.nome} — ${h.court}
+    </div>`
+  ).join("");
+
+  document.getElementById("modalContent").innerHTML=`
+    <h3 style="margin-bottom:8px">Importar horários fixos</h3>
+    <p style="font-size:.85rem;color:#555;margin-bottom:14px">
+      Serão cadastrados <strong>${HORARIOS_FIXOS.length} horários fixos</strong> na agenda.<br>
+      Depois você pode remover qualquer um pelo painel Admin → Agenda → ⋯ opções.
+    </p>
+    <div style="max-height:320px;overflow-y:auto;border:1px solid #eee;border-radius:10px;padding:8px 12px;margin-bottom:16px">
+      ${lista}
+    </div>
+    <div style="background:#fff3e0;border-radius:8px;padding:10px 12px;font-size:.82rem;color:#e65100;margin-bottom:16px">
+      ⚠️ Se já importou antes, vai duplicar. Verifique a agenda antes de importar.
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="doImportFixos()">✅ Importar tudo</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+    </div>`;
+  document.getElementById("modalBackdrop").classList.add("show");
+}
+
+async function doImportFixos() {
+  showLoading("Importando horários fixos...");
+  const hoje = toDateKey(new Date());
+  let ok = 0, err = 0;
+
+  for (const h of HORARIOS_FIXOS) {
+    try {
+      const newR = {
+        tipo:             "fixo",
+        time:             h.time,
+        court:            h.court,
+        nome:             h.nome,
+        telefone:         "",
+        valor:            60,
+        status_pagamento: "pendente",
+        date:             null,
+        weekday:          h.weekday,
+        start_date:       hoje,
+        exceptions:       [],
+        created_at:       new Date().toISOString()
+      };
+      const saved = await dbAddRes(newR);
+      reservations.push(saved);
+      ok++;
+    } catch(e) {
+      console.error("Erro ao importar", h.nome, e);
+      err++;
+    }
+  }
+
+  hideLoading();
+  closeModal();
+  renderAll();
+
+  if(err===0) {
+    showToast(`✅ ${ok} horários fixos importados com sucesso!`);
+  } else {
+    showToast(`⚠️ ${ok} importados, ${err} com erro.`, false);
+  }
+}
+
+
 // ─────────────────────────────────────────
 // MATTER.JS
 // ─────────────────────────────────────────
@@ -989,6 +1325,19 @@ document.getElementById("calNextBtn").addEventListener("click",()=>{
 document.getElementById("calTodayBtn").addEventListener("click",()=>{
   const n=nowSP();calYear=n.getFullYear();calMonth=n.getMonth();calSelectedDk=null;renderCalendar();
 });
+
+// Admin calendar nav
+document.addEventListener("click", e=>{
+  if(e.target.id==="admCalPrevBtn"){
+    admCalMonth--;if(admCalMonth<0){admCalMonth=11;admCalYear--;}admCalSelectedDk=null;renderAdmCalendar();
+  }
+  if(e.target.id==="admCalNextBtn"){
+    admCalMonth++;if(admCalMonth>11){admCalMonth=0;admCalYear++;}admCalSelectedDk=null;renderAdmCalendar();
+  }
+  if(e.target.id==="admCalTodayBtn"){
+    const n=nowSP();admCalYear=n.getFullYear();admCalMonth=n.getMonth();admCalSelectedDk=null;renderAdmCalendar();
+  }
+});
 document.getElementById("backToAgendaBtn").addEventListener("click",()=>showScreen("agenda"));
 document.getElementById("clearReserveBtn").addEventListener("click",clearResForm);
 document.getElementById("confirmReserveBtn").addEventListener("click",confirmReservation);
@@ -1002,7 +1351,7 @@ document.querySelectorAll(".admin-tab").forEach(btn=>{
     btn.classList.add("active");
     document.querySelectorAll(".admin-tab-content").forEach(c=>c.classList.add("hidden"));
     document.getElementById(`admin-tab-${btn.dataset.adminTab}`).classList.remove("hidden");
-    if(btn.dataset.adminTab==="agenda")    {renderAdmDays();renderAdmSchedule();}
+    if(btn.dataset.adminTab==="agenda")    {renderAdmCalendar();renderAdmDays();renderAdmSchedule();}
     if(btn.dataset.adminTab==="pagamentos") renderPayTable();
     if(btn.dataset.adminTab==="alunos")     renderAlunosTable();
   });

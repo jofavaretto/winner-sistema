@@ -271,10 +271,66 @@
           </div>
 
           <div id="admin-tab-agenda" class="admin-tab-content hidden">
-            <div id="adminDaysContainer" class="days"></div>
-            <div class="grid-wrap">
-              <div id="adminGrid"></div>
+
+            <!-- CABEÇALHO COM CALENDÁRIO ADMIN -->
+            <div class="cal-header">
+              <div class="cal-nav">
+                <button class="cal-nav-btn" id="admCalPrevBtn">&#8249;</button>
+                <button class="cal-today-btn" id="admCalTodayBtn">Este mês</button>
+                <div class="cal-month-label" id="admCalMonthLabel"></div>
+                <button class="cal-nav-btn" id="admCalNextBtn">&#8250;</button>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <button class="btn btn-outline" onclick="openImportFixosModal()"
+                  style="font-size:.82rem;padding:7px 14px;border-color:#2d6018;color:#2d6018">
+                  📥 Importar horários fixos
+                </button>
+              </div>
             </div>
+
+            <!-- LEGENDA -->
+            <div class="legend" style="margin-bottom:12px">
+              <div class="legend-item"><span class="dot" style="background:#1e8e3e"></span> Pago</div>
+              <div class="legend-item"><span class="dot" style="background:#cf3b2f"></span> Pendente</div>
+              <div class="legend-item"><span class="dot" style="background:#2d6018"></span> Fixo · Coberta</div>
+              <div class="legend-item"><span class="dot" style="background:#1a5e80"></span> Fixo · Q2</div>
+              <div class="legend-item"><span class="dot" style="background:#b45309"></span> Fixo · Q3</div>
+            </div>
+
+            <!-- CALENDÁRIO ADMIN -->
+            <div class="cal-grid-wrap" style="margin-bottom:20px">
+              <div class="cal-weekdays">
+                <div>Dom</div><div>Seg</div><div>Ter</div>
+                <div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div>
+              </div>
+              <div class="cal-grid" id="admCalGrid"></div>
+            </div>
+
+            <!-- DETALHE DO DIA ADMIN -->
+            <div class="cal-day-detail hidden" id="admCalDayDetail">
+              <div class="cal-detail-header">
+                <span id="admCalDetailDate"></span>
+                <button class="cal-detail-close" onclick="closeAdmCalDetail()">✕</button>
+              </div>
+              <div id="admCalDetailList"></div>
+              <button class="btn btn-primary" style="margin-top:12px;width:100%"
+                onclick="openAdmNewResFromCal()">+ Adicionar reserva neste dia</button>
+            </div>
+
+            <!-- GRADE HORÁRIA SEMANAL (detalhe) -->
+            <div id="admGridSection" class="hidden">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <button class="btn btn-outline" onclick="closeAdmGrid()" style="font-size:.82rem;padding:6px 12px">
+                  ← Voltar ao calendário
+                </button>
+                <strong id="admGridDateLabel" style="font-size:.9rem;color:#2d6018"></strong>
+              </div>
+              <div id="adminDaysContainer" class="days"></div>
+              <div class="grid-wrap">
+                <div id="adminGrid"></div>
+              </div>
+            </div>
+
           </div>
 
           <div id="admin-tab-alunos" class="admin-tab-content hidden">
@@ -306,11 +362,8 @@
     </section>
 
     <div class="footer-note">
-  WINNER – Esportes de Areia • Todos os direitos reservados. <br>
-  <a href="/politica-de-privacidade" style="color: inherit; text-decoration: none;">Privacidade (LGPD)</a> • 
-  <br> 
-  Desenvolvido por Mix Digitech
-</div>
+      WINNER – Esportes de Areia • Sistema web
+    </div>
   </div>
 
   <div id="modalBackdrop" class="modal-backdrop">
