@@ -35,18 +35,24 @@ const MONTHS_PT  = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
 const MONTHS_SH  = ["Jan","Fev","Mar","Abr","Mai","Jun",
                     "Jul","Ago","Set","Out","Nov","Dez"];
 
-// Gera 12 meses dinamicamente: 6 anteriores + mês atual + 5 próximos
+// Gera meses dinamicamente: Jan/2026 até 12 meses à frente
 function buildMeses() {
   const now   = new Date();
   const meses = [];
-  // começa 6 meses atrás para ter histórico
-  for (let i = -6; i <= 11; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    const y = d.getFullYear();
-    const m = d.getMonth(); // 0-indexed
+  // começa sempre em Jan/2026 como início fixo
+  const startYear  = 2026;
+  const startMonth = 0; // Janeiro
+  // vai até 12 meses após o mês atual
+  const endDate = new Date(now.getFullYear(), now.getMonth() + 12, 1);
+
+  let y = startYear;
+  let m = startMonth;
+  while (new Date(y, m, 1) <= endDate) {
     const key   = `${y}-${String(m+1).padStart(2,"0")}`;
     const label = `${MONTHS_SH[m]}/${String(y).slice(2)}`;
     meses.push({ key, label });
+    m++;
+    if (m > 11) { m = 0; y++; }
   }
   return meses;
 }
